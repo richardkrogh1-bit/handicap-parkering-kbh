@@ -1020,25 +1020,15 @@
       sheet.classList.remove('collapsed');
     }
 
-    // Center the map so the point is in the dead center of the VISIBLE map area (above the sheet)
+    // Center the map so the point appears at ~25% height (top quarter of visible map)
     function centerMapOnPoint(lat, lng, zoom) {
-      // First set zoom level
       map.setZoom(zoom, { animate: false });
-      // Calculate the offset: the sheet covers the bottom portion, so shift the center up
-      const sheet = document.getElementById('bottomSheet');
-      const sheetH = sheet.offsetHeight || 0;
       const mapH = map.getContainer().offsetHeight;
-      // The visible map area is from top (after search bar ~60px) to top of sheet
       const searchBarH = 60;
-      const visibleH = mapH - sheetH - searchBarH;
-      // We want the point at the center of this visible area
-      // That center is at searchBarH + visibleH/2 from the top
-      // The map center is at mapH/2 from the top
-      // So we need to shift the point by (mapH/2 - (searchBarH + visibleH/2)) pixels
-      const targetCenterY = searchBarH + visibleH / 2;
+      // Place the point at 25% of the total map height (near top)
+      const targetY = mapH * 0.25;
       const mapCenterY = mapH / 2;
-      const offsetY = mapCenterY - targetCenterY;
-      // Convert the lat/lng to pixel, apply offset, convert back
+      const offsetY = mapCenterY - targetY;
       const point = map.latLngToContainerPoint([lat, lng]);
       const adjusted = L.point(point.x, point.y + offsetY);
       const adjustedLatLng = map.containerPointToLatLng(adjusted);
