@@ -516,9 +516,9 @@
   </button>
 
   <!-- Bottom sheet -->
-  <div class="bottom-sheet" id="bottomSheet">
+  <div class="bottom-sheet" id="bottomSheet" style="display:none">
     <div class="sheet-handle" id="sheetHandle"></div>
-    <div class="sheet-header" id="sheetHeader">Soeg en adresse eller brug GPS</div>
+    <div class="sheet-header" id="sheetHeader"></div>
     <div class="distance-filter" id="distanceFilter">
       <button class="dist-btn active" data-range="250">250 m</button>
       <button class="dist-btn" data-range="500">500 m</button>
@@ -529,10 +529,6 @@
       </button>
     </div>
     <div class="results-list" id="resultsList">
-      <div class="empty-state" id="emptyState">
-        <div class="loading-spinner" id="loadingSpinner"></div>
-        <div id="emptyText">Indlaeser parkeringspladser...</div>
-      </div>
     </div>
   </div>
 
@@ -649,9 +645,6 @@
 
       // Final update
       addMarkersToMap();
-      document.getElementById('loadingSpinner').style.display = 'none';
-      document.getElementById('emptyText').textContent = 'Soeg en adresse eller brug GPS for at finde naermeste pladser';
-      document.getElementById('sheetHeader').textContent = allSpots.length + ' handicapparkeringer';
     }
 
     // Merge spots with same street + house number into one entry
@@ -681,13 +674,10 @@
       ];
     }
 
-    function updateLoadingUI() {
-      document.getElementById('sheetHeader').textContent = allSpots.length + ' handicapparkeringer';
-    }
+    function updateLoadingUI() {}
 
     function sourceLoaded(name, count) {
       loadedSources++;
-      document.getElementById('emptyText').textContent = `Indlaeser... (${loadedSources}/${totalSources} kilder, ${allSpots.length} pladser)`;
     }
 
     // Source 1: KBH main handicap visitor spots
@@ -944,7 +934,9 @@
 
         // Center map on searched location
         centerMapOnPoint(originLat, originLng, 17);
-        document.getElementById('bottomSheet').classList.remove('collapsed');
+        const sheet0 = document.getElementById('bottomSheet');
+        sheet0.style.display = 'flex';
+        sheet0.classList.remove('collapsed');
         return;
       }
 
@@ -1022,20 +1014,35 @@
       const zoomForRange = maxRange <= 250 ? 17 : maxRange <= 500 ? 16 : 15;
       centerMapOnPoint(originLat, originLng, zoomForRange);
 
-      // Expand sheet
-      document.getElementById('bottomSheet').classList.remove('collapsed');
+      // Show and expand sheet
+      const sheet = document.getElementById('bottomSheet');
+      sheet.style.display = 'flex';
+      sheet.classList.remove('collapsed');
     }
 
-    // Center the map so the point appears in the visible area above the bottom sheet
+    // Center the map so the point is in the dead center of the VISIBLE map area (above the sheet)
     function centerMapOnPoint(lat, lng, zoom) {
-      map.setView([lat, lng], zoom, { animate: true });
-      // After the view is set, offset downward to push the point above the sheet
-      setTimeout(() => {
-        const sheetHeight = document.getElementById('bottomSheet').offsetHeight || 0;
-        const mapHeight = map.getContainer().offsetHeight;
-        const offsetPx = sheetHeight / 2;
-        map.panBy([0, -offsetPx], { animate: true, duration: 0.3 });
-      }, 100);
+      // First set zoom level
+      map.setZoom(zoom, { animate: false });
+      // Calculate the offset: the sheet covers the bottom portion, so shift the center up
+      const sheet = document.getElementById('bottomSheet');
+      const sheetH = sheet.offsetHeight || 0;
+      const mapH = map.getContainer().offsetHeight;
+      // The visible map area is from top (after search bar ~60px) to top of sheet
+      const searchBarH = 60;
+      const visibleH = mapH - sheetH - searchBarH;
+      // We want the point at the center of this visible area
+      // That center is at searchBarH + visibleH/2 from the top
+      // The map center is at mapH/2 from the top
+      // So we need to shift the point by (mapH/2 - (searchBarH + visibleH/2)) pixels
+      const targetCenterY = searchBarH + visibleH / 2;
+      const mapCenterY = mapH / 2;
+      const offsetY = mapCenterY - targetCenterY;
+      // Convert the lat/lng to pixel, apply offset, convert back
+      const point = map.latLngToContainerPoint([lat, lng]);
+      const adjusted = L.point(point.x, point.y + offsetY);
+      const adjustedLatLng = map.containerPointToLatLng(adjusted);
+      map.setView(adjustedLatLng, zoom, { animate: true });
     }
 
     function setRange(range) {
@@ -1430,11 +1437,47 @@
     document.getElementById('tabFav').addEventListener('click', () => switchTab('fav'));
     document.getElementById('favInlineBtn').addEventListener('click', () => switchTab('fav'));
 
-    // ---- Bottom sheet drag ----
-    const sheetHandle = document.getElementById('sheetHandle');
+    // ---- Bottom sheet swipe to dismiss ----
     const bottomSheet = document.getElementById('bottomSheet');
+    let touchStartY = 0;
+    let touchCurrentY = 0;
+    let isDragging = false;
 
-    sheetHandle.addEventListener('click', () => {
+    bottomSheet.addEventListener('touchstart', e => {
+      // Only start drag from the handle area or header (top 60px of sheet)
+      const rect = bottomSheet.getBoundingClientRect();
+      const touchY = e.touches[0].clientY - rect.top;
+      if (touchY > 60) return; // only drag from top area
+      touchStartY = e.touches[0].clientY;
+      isDragging = true;
+      bottomSheet.style.transition = 'none';
+    }, { passive: true });
+
+    bottomSheet.addEventListener('touchmove', e => {
+      if (!isDragging) return;
+      touchCurrentY = e.touches[0].clientY;
+      const deltaY = touchCurrentY - touchStartY;
+      if (deltaY > 0) {
+        // Dragging down - translate the sheet
+        bottomSheet.style.transform = `translateY(${deltaY}px)`;
+      }
+    }, { passive: true });
+
+    bottomSheet.addEventListener('touchend', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      bottomSheet.style.transition = 'transform 0.3s ease, max-height 0.3s ease';
+      const deltaY = touchCurrentY - touchStartY;
+      if (deltaY > 80) {
+        // Swiped down enough - collapse
+        bottomSheet.classList.add('collapsed');
+        sheetCollapsed = true;
+      }
+      bottomSheet.style.transform = '';
+    });
+
+    // Tap handle to toggle
+    document.getElementById('sheetHandle').addEventListener('click', () => {
       sheetCollapsed = !sheetCollapsed;
       bottomSheet.classList.toggle('collapsed', sheetCollapsed);
     });
