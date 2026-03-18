@@ -1,0 +1,18 @@
+{
+  "name": "Handicapparkering KBH",
+  "short_name": "H-Parkering",
+  "description": "Find naermeste handicapparkeringspladser i Koebenhavn",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#276EF1",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='96' fill='%23276EF1'/><text x='256' y='340' font-size='320' font-weight='700' font-family='system-ui,sans-serif' text-anchor='middle' fill='white'>P</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

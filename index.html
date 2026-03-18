@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#276EF1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="H-Parkering">
+  <link rel="manifest" href="manifest.json">
+  <title>Handicapparkering KBH</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #276EF1;
+      --blue-light: #EBF1FE;
+      --black: #1a1a1a;
+      --gray-100: #f7f7f7;
+      --gray-200: #eeeeee;
+      --gray-400: #999999;
+      --gray-600: #666666;
+      --white: #ffffff;
+      --radius: 12px;
+      --shadow: 0 2px 12px rgba(0,0,0,0.12);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--black);
+      background: var(--white);
+      overflow: hidden;
+      height: 100dvh;
+      width: 100vw;
+      position: fixed;
+      top: 0; left: 0;
+    }
+
+    /* Map */
+    #map {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .leaflet-control-zoom { display: none; }
+
+    .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+      background: rgba(39, 110, 241, 0.2);
+    }
+    .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+      background: #276EF1;
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    /* Search location pin pulse */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.8); opacity: 1; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+    .search-pin-pulse {
+      position: absolute;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: rgba(231, 76, 60, 0.3);
+      animation: pulse-ring 1.5s ease-out infinite;
+      top: 50%; left: 50%;
+      transform-origin: center;
+      margin-top: -20px; margin-left: -20px;
+      pointer-events: none;
+    }
+
+    /* Search bar */
+    .search-container {
+      position: absolute;
+      top: 12px; left: 12px; right: 12px;
+      z-index: 1000;
+    }
+
+    .search-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      height: 48px;
+      gap: 10px;
+    }
+
+    .search-card svg { flex-shrink: 0; color: var(--gray-400); }
+
+    .search-card input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 15px;
+      font-family: inherit;
+      background: transparent;
+      color: var(--black);
+    }
+    .search-card input::placeholder { color: var(--gray-400); }
+
+    .search-clear {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      color: var(--gray-400);
+    }
+    .search-clear.visible { display: block; }
+
+    .search-dropdown {
+      display: none;
+      background: var(--white);
+      border-radius: 0 0 var(--radius) var(--radius);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      margin-top: -4px;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .search-dropdown.open { display: block; }
+
+    .search-dropdown-item {
+      padding: 12px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .search-dropdown-item:last-child { border-bottom: none; }
+    .search-dropdown-item:active { background: var(--gray-100); }
+
+    /* GPS button */
+    .gps-btn {
+      position: absolute;
+      bottom: 320px;
+      right: 14px;
+      z-index: 1000;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--white);
+      border: none;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--black);
+      transition: background 0.15s;
+    }
+    .gps-btn:active { background: var(--gray-100); }
+    .gps-btn.active { color: var(--blue); }
+
+    /* Bottom sheet */
+    .bottom-sheet {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      z-index: 1000;
+      background: var(--white);
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -2px 16px rgba(0,0,0,0.1);
+      max-height: 55vh;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+      transition: max-height 0.3s ease;
+    }
+
+    .bottom-sheet.collapsed { max-height: 130px; }
+
+    .sheet-handle {
+      width: 36px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--gray-200);
+      margin: 10px auto 0;
+      flex-shrink: 0;
+      cursor: grab;
+    }
+
+    .sheet-header {
+      padding: 12px 16px 4px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-600);
+      flex-shrink: 0;
+    }
+
+    .distance-filter {
+      display: none;
+      padding: 4px 16px 8px;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .distance-filter.visible { display: flex; }
+
+    .dist-btn {
+      padding: 5px 12px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 20px;
+      background: var(--white);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--gray-600);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .dist-btn.active {
+      background: var(--blue);
+      color: var(--white);
+      border-color: var(--blue);
+    }
+
+    .expand-range {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--blue);
+      cursor: pointer;
+      border-bottom: 1px solid var(--gray-200);
+    }
+    .expand-range:active { background: var(--blue-light); }
+
+    .street-group-header {
+      padding: 8px 16px 4px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--gray-400);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: var(--gray-100);
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .results-list {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: calc(56px + var(--safe-bottom));
+    }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      gap: 12px;
+      border-bottom: 1px solid var(--gray-200);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .result-item:active { background: var(--gray-100); }
+    .result-item.highlighted { background: var(--blue-light); }
+
+    .result-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: var(--blue);
+    }
+
+    .result-info { flex: 1; min-width: 0; }
+    .result-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .result-details { font-size: 13px; color: var(--gray-600); margin-top: 2px; }
+    .result-source { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+
+    .result-distance {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--black);
+      white-space: nowrap;
+      margin-right: 4px;
+    }
+
+    .result-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+    .action-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--gray-600);
+      transition: background 0.15s, color 0.15s;
+    }
+    .action-btn:active { background: var(--gray-100); }
+    .action-btn.fav-active { color: #e74c3c; }
+
+    /* Empty/loading states */
+    .empty-state {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--gray-400);
+      font-size: 14px;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Tab bar */
+    .tab-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 1001;
+      height: calc(56px + var(--safe-bottom));
+      padding-bottom: var(--safe-bottom);
+      background: var(--white);
+      border-top: 1px solid var(--gray-200);
+      display: flex;
+    }
+
+    .tab-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: inherit;
+      color: var(--gray-400);
+      transition: color 0.15s;
+      padding: 6px 0;
+    }
+    .tab-btn.active { color: var(--blue); }
+
+    /* Favorites view */
+    .favorites-view {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 1000;
+      background: var(--white);
+      display: none;
+      flex-direction: column;
+    }
+    .favorites-view.visible { display: flex; }
+
+    .favorites-header {
+      padding: 56px 16px 12px;
+      font-size: 22px;
+      font-weight: 700;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .favorites-list {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: calc(56px + var(--safe-bottom));
+    }
+
+    .fav-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .fav-item-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+    }
+
+    .fav-item-info { flex: 1; }
+    .fav-item-name { font-size: 15px; font-weight: 600; }
+    .fav-item-details { font-size: 13px; color: var(--gray-600); margin-top: 2px; }
+
+    .fav-remove {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: none;
+      color: var(--gray-400);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+    .fav-remove:active { background: var(--gray-100); }
+
+    .fav-note-area {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .fav-note-input {
+      flex: 1;
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      resize: none;
+      min-height: 36px;
+      outline: none;
+    }
+    .fav-note-input:focus { border-color: var(--blue); }
+
+    .fav-note-save {
+      border: none;
+      background: var(--blue);
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--black);
+      color: var(--white);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      z-index: 2000;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- Search -->
+  <div class="search-container">
+    <div class="search-card">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input id="searchInput" type="text" placeholder="Soeg adresse eller sted..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <button class="search-clear" id="searchClear" aria-label="Ryd soegning">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="search-dropdown" id="searchDropdown"></div>
+  </div>
+
+  <!-- GPS button -->
+  <button class="gps-btn" id="gpsBtn" aria-label="Brug min placering">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+      <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+    </svg>
+  </button>
+
+  <!-- Bottom sheet -->
+  <div class="bottom-sheet" id="bottomSheet">
+    <div class="sheet-handle" id="sheetHandle"></div>
+    <div class="sheet-header" id="sheetHeader">Soeg en adresse eller brug GPS</div>
+    <div class="distance-filter" id="distanceFilter">
+      <button class="dist-btn active" data-range="250">250 m</button>
+      <button class="dist-btn" data-range="500">500 m</button>
+      <button class="dist-btn" data-range="1000">1 km</button>
+    </div>
+    <div class="results-list" id="resultsList">
+      <div class="empty-state" id="emptyState">
+        <div class="loading-spinner" id="loadingSpinner"></div>
+        <div id="emptyText">Indlaeser parkeringspladser...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Favorites view -->
+  <div class="favorites-view" id="favoritesView">
+    <div class="favorites-header">Favoritter</div>
+    <div class="favorites-list" id="favoritesList"></div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tabMap" aria-label="Kort">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+        <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
+      </svg>
+      Kort
+    </button>
+    <button class="tab-btn" id="tabFav" aria-label="Favoritter">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+      </svg>
+      Favoritter
+    </button>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ---- State ----
+    let map, markersLayer, searchMarker, gpsMarker, gpsWatchId;
+    let allSpots = [];
+    let currentOrigin = null;
+    let favorites = JSON.parse(localStorage.getItem('handicap-parking-favorites') || '[]');
+    let sheetCollapsed = false;
+    let activeTab = 'map';
+    let debounceTimer;
+    let loadedSources = 0;
+    let totalSources = 4;
+    let maxRange = 250; // default distance filter in meters
+
+    // ---- Official ISA Wheelchair Symbol (Wikipedia SVG) ----
+    const WHEELCHAIR_PATH = 'M161.99 98.12c24.96-2.3 44.36-23.81 44.36-48.97C206.35 22.08 184.26 0 157.19 0s-49.16 22.08-49.16 49.16c0 8.26 2.3 16.71 6.14 23.81l17.52 246.47 180.4.05 73.99 173.37 97.14-38.1-15.04-35.82-54.37 19.63-71.59-165.28-167.73 1.13-2.3-31.21 121.42.05v-46.18l-126.05-.05L161.99 98.12z M343.42 451.59c-30.45 60.19-94.17 99.84-162.15 99.84C81.43 551.43 0 470 0 370.16c0-70.1 42.49-135.24 105.88-164.12l4.1 53.54c-37.5 23.63-60.61 66.26-60.61 110.95 0 72.43 59.07 131.5 131.5 131.5 66.26 0 122.76-50.85 130.47-116.09l32.08 65.65z';
+
+    function wheelchairMarkerSVG(count) {
+      const badge = count > 1 ? `<div style="position:absolute;top:-5px;right:-5px;min-width:20px;height:20px;border-radius:10px;background:#e74c3c;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;border:2px solid #fff;padding:0 4px">${count}</div>` : '';
+      return `<div style="position:relative;width:32px;height:32px">
+        <div style="width:32px;height:32px;border-radius:50%;background:#276EF1;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.35);border:2px solid #fff">
+          <svg width="16" height="16" viewBox="0 0 483 552" fill="white"><path d="${WHEELCHAIR_PATH}"/></svg>
+        </div>
+        ${badge}
+      </div>`;
+    }
+
+    function wheelchairListSVG() {
+      return `<svg width="20" height="20" viewBox="0 0 483 552" fill="white"><path d="${WHEELCHAIR_PATH}"/></svg>`;
+    }
+
+    // ---- Map init ----
+    map = L.map('map', {
+      center: [55.676, 12.568],
+      zoom: 13,
+      zoomControl: false,
+      attributionControl: false
+    });
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+
+    L.control.attribution({ position: 'bottomleft', prefix: false })
+      .addAttribution('&copy; <a href="https://openstreetmap.org">OSM</a>')
+      .addTo(map);
+
+    markersLayer = L.markerClusterGroup({
+      maxClusterRadius: 45,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      disableClusteringAtZoom: 17
+    }).addTo(map);
+
+    // ---- Custom icons ----
+    function parkingIcon(count) {
+      const size = count > 1 ? 36 : 32;
+      return L.divIcon({
+        className: '',
+        html: wheelchairMarkerSVG(count),
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2],
+        popupAnchor: [0, -size/2 - 2]
+      });
+    }
+
+    // ---- Dedup helper ----
+    function isDuplicate(spot) {
+      return allSpots.some(s =>
+        Math.abs(s.lat - spot.lat) < 0.00005 &&
+        Math.abs(s.lng - spot.lng) < 0.00005
+      );
+    }
+
+    // ---- Load ALL parking data from multiple sources ----
+    async function loadParkingData() {
+      totalSources = 5;
+
+      // Load primary source first, then show map while loading rest
+      await loadKBHHandi();
+      addMarkersToMap();
+      updateLoadingUI();
+
+      // Load remaining sources in parallel
+      await Promise.allSettled([
+        loadKBHMunicipal(),
+        loadKBHPladser(),
+        loadFrederiksbergPublic(),
+        loadOSMData()
+      ]);
+
+      // Merge spots at same address
+      mergeNearbySpots();
+
+      // Final update
+      addMarkersToMap();
+      document.getElementById('loadingSpinner').style.display = 'none';
+      document.getElementById('emptyText').textContent = 'Soeg en adresse eller brug GPS for at finde naermeste pladser';
+      document.getElementById('sheetHeader').textContent = allSpots.length + ' handicapparkeringer';
+    }
+
+    // Merge spots with same street + house number into one entry
+    function mergeNearbySpots() {
+      const byAddr = new Map();
+      allSpots.forEach(spot => {
+        if (!spot.vejnavn) return;
+        const key = (spot.vejnavn + ' ' + spot.husnr).trim().toLowerCase();
+        if (byAddr.has(key)) {
+          const existing = byAddr.get(key);
+          existing.antal += spot.antal;
+          if (spot.bemaerkning && !existing.bemaerkning.includes(spot.bemaerkning)) {
+            existing.bemaerkning = [existing.bemaerkning, spot.bemaerkning].filter(Boolean).join(', ');
+          }
+          if (spot.source !== existing.source) {
+            existing.source = [existing.source, spot.source].filter(Boolean).join(' + ');
+          }
+          existing._merged = true;
+        } else {
+          byAddr.set(key, spot);
+        }
+      });
+      // Keep merged spots + spots without street name
+      allSpots = [
+        ...byAddr.values(),
+        ...allSpots.filter(s => !s.vejnavn)
+      ];
+    }
+
+    function updateLoadingUI() {
+      document.getElementById('sheetHeader').textContent = allSpots.length + ' handicapparkeringer';
+    }
+
+    function sourceLoaded(name, count) {
+      loadedSources++;
+      document.getElementById('emptyText').textContent = `Indlaeser... (${loadedSources}/${totalSources} kilder, ${allSpots.length} pladser)`;
+    }
+
+    // Source 1: KBH main handicap visitor spots
+    async function loadKBHHandi() {
+      try {
+        const res = await fetch('https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=k101:p_besogspladser_handi&outputFormat=json&SRSNAME=EPSG:4326');
+        const data = await res.json();
+        const spots = data.features.map(f => ({
+          id: f.properties.uuid || f.id,
+          lat: f.geometry.coordinates[1],
+          lng: f.geometry.coordinates[0],
+          vejnavn: f.properties.vejnavn || '',
+          husnr: f.properties.husnr || '',
+          antal: f.properties.antal_pladser || 1,
+          pType: f.properties.p_type || '',
+          bemaerkning: f.properties.bemaerkning || '',
+          restriktionstype: f.properties.restriktionstype || '',
+          restriktionstekst: f.properties.restriktionstekst || '',
+          source: 'KBH'
+        }));
+        allSpots.push(...spots);
+        sourceLoaded('KBH handi', spots.length);
+      } catch (e) { sourceLoaded('KBH handi', 0); }
+    }
+
+    // Source 2: KBH municipal property parking with handicap spots
+    async function loadKBHMunicipal() {
+      try {
+        const res = await fetch('https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=k101:p_pladser_kk_ejd&outputFormat=json&SRSNAME=EPSG:4326');
+        const data = await res.json();
+        const spots = data.features
+          .filter(f => f.properties.handicap_pl && f.properties.handicap_pl > 0)
+          .filter(f => f.geometry && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length === 2 && typeof f.geometry.coordinates[0] === 'number')
+          .map(f => ({
+            id: 'mun-' + (f.properties.gml_id || f.id),
+            lat: f.geometry.coordinates[1],
+            lng: f.geometry.coordinates[0],
+            vejnavn: f.properties.vejnavn || f.properties.ejendomsnavn || '',
+            husnr: f.properties.husnr || '',
+            antal: f.properties.handicap_pl,
+            pType: 'Kommunal ejendom',
+            bemaerkning: f.properties.ejendomsnavn || '',
+            restriktionstype: '',
+            restriktionstekst: '',
+            source: 'KBH kommunal'
+          }))
+          .filter(s => !isDuplicate(s));
+        allSpots.push(...spots);
+        sourceLoaded('KBH municipal', spots.length);
+      } catch (e) { sourceLoaded('KBH municipal', 0); }
+    }
+
+    // Source 3: KBH general parking with handicap in remarks (CQL filtered server-side)
+    async function loadKBHPladser() {
+      try {
+        const cql = encodeURIComponent("bemaerkning ILIKE '%handicap%' OR restriktionstekst ILIKE '%handicap%'");
+        const res = await fetch(`https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=k101:p_pladser&outputFormat=json&SRSNAME=EPSG:4326&CQL_FILTER=${cql}`);
+        const data = await res.json();
+        const spots = data.features
+          .filter(f => f.geometry)
+          .map(f => ({
+            id: 'ppl-' + (f.properties.uuid || f.id),
+            lat: f.geometry.coordinates[1],
+            lng: f.geometry.coordinates[0],
+            vejnavn: f.properties.vejnavn || '',
+            husnr: f.properties.husnr || '',
+            antal: f.properties.antal_pladser || 1,
+            pType: f.properties.p_type || 'Delt/tidsbegreanset',
+            bemaerkning: f.properties.bemaerkning || '',
+            restriktionstype: f.properties.restriktionstype || '',
+            restriktionstekst: f.properties.restriktionstekst || '',
+            source: 'KBH parkering'
+          }))
+          .filter(s => !isDuplicate(s));
+        allSpots.push(...spots);
+        sourceLoaded('KBH pladser', spots.length);
+      } catch (e) { sourceLoaded('KBH pladser', 0); }
+    }
+
+    // Source 4: Frederiksberg public handicap parking
+    async function loadFrederiksbergPublic() {
+      try {
+        const res = await fetch("https://gc2ekstern.frederiksberg.dk/api/v2/sql/frederiksberg?q=SELECT%20*%20FROM%20mobilitet.offentlig_handicapparkering&format=geojson&srs=4326");
+        const data = await res.json();
+        if (!data.features) { sourceLoaded('Frederiksberg', 0); return; }
+        const spots = data.features
+          .filter(f => {
+            if (!f.geometry) return false;
+            // Only accept Point geometry (coordinates = [lng, lat])
+            const c = f.geometry.coordinates;
+            return Array.isArray(c) && c.length === 2 && typeof c[0] === 'number' && typeof c[1] === 'number';
+          })
+          .map(f => ({
+            id: 'frb-' + (f.properties.gid || f.properties.id || Math.random().toString(36).slice(2)),
+            lat: f.geometry.coordinates[1],
+            lng: f.geometry.coordinates[0],
+            vejnavn: f.properties.vej || f.properties.vejnavn || '',
+            husnr: f.properties.husnr || f.properties.nr || '',
+            antal: f.properties.antal || f.properties.antal_pladser || 1,
+            pType: 'Offentlig',
+            bemaerkning: f.properties.beskrivelse || f.properties.bemaerkning || '',
+            restriktionstype: '',
+            restriktionstekst: '',
+            source: 'Frederiksberg'
+          }))
+          .filter(s => !isDuplicate(s));
+        allSpots.push(...spots);
+        sourceLoaded('Frederiksberg', spots.length);
+      } catch (e) { sourceLoaded('Frederiksberg', 0); }
+    }
+
+    // Source 5: OpenStreetMap handicap parking via Overpass API
+    async function loadOSMData() {
+      try {
+        const query = `[out:json][timeout:15];(node["amenity"="parking_space"]["parking_space"="disabled"](55.6,12.4,55.75,12.65);node["amenity"="parking"]["capacity:disabled"](55.6,12.4,55.75,12.65);way["amenity"="parking_space"]["parking_space"="disabled"](55.6,12.4,55.75,12.65);way["amenity"="parking"]["capacity:disabled"](55.6,12.4,55.75,12.65););out center body;`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
+        const res = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          body: 'data=' + encodeURIComponent(query),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        const data = await res.json();
+        const spots = data.elements
+          .map(el => {
+            const lat = el.lat || el.center?.lat;
+            const lng = el.lon || el.center?.lon;
+            if (!lat || !lng) return null;
+            const name = el.tags?.name || el.tags?.['addr:street'] || '';
+            const nr = el.tags?.['addr:housenumber'] || '';
+            const cap = parseInt(el.tags?.['capacity:disabled'] || el.tags?.capacity || '1') || 1;
+            return {
+              id: 'osm-' + el.id,
+              lat, lng,
+              vejnavn: name,
+              husnr: nr,
+              antal: cap,
+              pType: el.tags?.access === 'private' ? 'Privat' : 'OSM',
+              bemaerkning: el.tags?.description || el.tags?.note || '',
+              restriktionstype: '',
+              restriktionstekst: el.tags?.opening_hours || '',
+              source: 'OpenStreetMap'
+            };
+          })
+          .filter(s => s && !isDuplicate(s));
+        allSpots.push(...spots);
+        sourceLoaded('OSM', spots.length);
+      } catch (e) { sourceLoaded('OSM', 0); }
+    }
+
+    // ---- Add markers ----
+    function addMarkersToMap() {
+      markersLayer.clearLayers();
+      allSpots.forEach(spot => {
+        if (!isFinite(spot.lat) || !isFinite(spot.lng)) return;
+        try {
+          const marker = L.marker([spot.lat, spot.lng], {
+            icon: parkingIcon(spot.antal)
+          });
+          marker.bindPopup(() => createPopupContent(spot));
+          marker.on('click', () => highlightResult(spot.id));
+          markersLayer.addLayer(marker);
+        } catch (e) { /* skip invalid coords */ }
+      });
+    }
+
+    function createPopupContent(spot) {
+      const addr = spot.vejnavn + (spot.husnr ? ' ' + spot.husnr : '');
+      const isFav = favorites.some(f => f.uuid === spot.id);
+      const typeLabel = spot.pType || 'Ukendt type';
+      let html = `<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;min-width:180px">`;
+      html += `<div style="font-weight:700;font-size:15px;margin-bottom:6px">${addr || 'Handicapparkering'}</div>`;
+      html += `<div style="font-size:13px;color:#666;line-height:1.5">`;
+      html += `${spot.antal} plads${spot.antal > 1 ? 'er' : ''}`;
+      if (spot.bemaerkning) html += `<br>${spot.bemaerkning}`;
+      if (spot.source && spot.source !== 'KBH') html += `<br><span style="color:#aaa;font-size:11px">Kilde: ${spot.source}</span>`;
+      html += `</div>`;
+      html += `<div style="display:flex;gap:8px;margin-top:10px">`;
+      html += `<button onclick="navigateTo(${spot.lat},${spot.lng})" style="flex:1;padding:8px;border:none;background:#276EF1;color:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Naviger</button>`;
+      html += `<button onclick="toggleFavorite('${spot.id}')" style="width:36px;padding:8px;border:1px solid #eee;background:#fff;border-radius:8px;cursor:pointer;font-size:16px;color:${isFav ? '#e74c3c' : '#999'}" id="popup-fav-${spot.id}">`;
+      html += isFav ? heartFilledSVG(16) : heartOutlineSVG(16);
+      html += `</button></div></div>`;
+      return html;
+    }
+
+    // ---- SVG helpers ----
+    function heartOutlineSVG(size) {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
+    }
+    function heartFilledSVG(size) {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
+    }
+    function arrowSVG() {
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>`;
+    }
+
+    // ---- Haversine distance ----
+    function haversine(lat1, lng1, lat2, lng2) {
+      const R = 6371000;
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function formatDistance(meters) {
+      if (meters < 1000) return Math.round(meters) + ' m';
+      return (meters / 1000).toFixed(1) + ' km';
+    }
+
+    // ---- Show results ----
+    function showResults(originLat, originLng) {
+      currentOrigin = { lat: originLat, lng: originLng };
+
+      // Show distance filter
+      document.getElementById('distanceFilter').classList.add('visible');
+
+      renderResults();
+    }
+
+    function renderResults() {
+      if (!currentOrigin) return;
+      const { lat: originLat, lng: originLng } = currentOrigin;
+
+      const sorted = allSpots
+        .map(s => ({ ...s, dist: haversine(originLat, originLng, s.lat, s.lng) }))
+        .sort((a, b) => a.dist - b.dist);
+
+      addMarkersToMap();
+
+      // Filter by max range
+      const inRange = sorted.filter(s => s.dist <= maxRange);
+      const nextRange = maxRange === 250 ? 500 : maxRange === 500 ? 1000 : null;
+      const spotsInNextRange = nextRange ? sorted.filter(s => s.dist <= nextRange).length : 0;
+
+      document.getElementById('sheetHeader').textContent = `${inRange.length} handicapparkeringer inden for ${maxRange < 1000 ? maxRange + ' m' : '1 km'}`;
+
+      const list = document.getElementById('resultsList');
+      list.innerHTML = '';
+
+      if (inRange.length === 0) {
+        // No results - suggest expanding
+        const nearest = sorted[0];
+        let suggestion = '';
+        if (nextRange) {
+          suggestion = `<div class="expand-range" onclick="setRange(${nextRange})">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            Udvid til ${nextRange < 1000 ? nextRange + ' m' : '1 km'} (${spotsInNextRange} pladser)
+          </div>`;
+        }
+        list.innerHTML = `<div class="empty-state">Ingen handicapparkeringer inden for ${maxRange} m${nearest ? `.<br>Naermeste er ${formatDistance(nearest.dist)} vaek.` : ''}</div>${suggestion}`;
+
+        // Center map on searched location
+        map.setView([originLat, originLng], 17);
+        document.getElementById('bottomSheet').classList.remove('collapsed');
+        return;
+      }
+
+      // Group by street name
+      const groups = new Map();
+      inRange.forEach(spot => {
+        const street = spot.vejnavn || 'Andet';
+        if (!groups.has(street)) groups.set(street, []);
+        groups.get(street).push(spot);
+      });
+
+      // Render grouped - sort groups by nearest spot in each
+      const sortedGroups = [...groups.entries()].sort((a, b) => a[1][0].dist - b[1][0].dist);
+
+      let globalIdx = 0;
+      sortedGroups.forEach(([street, spots]) => {
+        // Street group header
+        const totalSpots = spots.reduce((sum, s) => sum + s.antal, 0);
+        const header = document.createElement('div');
+        header.className = 'street-group-header';
+        header.textContent = `${street} - ${totalSpots} plads${totalSpots > 1 ? 'er' : ''}`;
+        list.appendChild(header);
+
+        // Individual spots on this street
+        spots.forEach(spot => {
+          const item = document.createElement('div');
+          item.className = 'result-item';
+          item.dataset.id = spot.id;
+
+          const addr = spot.vejnavn + (spot.husnr ? ' ' + spot.husnr : '');
+          const isFav = favorites.some(f => f.uuid === spot.id);
+
+          item.innerHTML = `
+            <div class="result-icon">${wheelchairListSVG()}</div>
+            <div class="result-info">
+              <div class="result-name">${addr || 'Handicapparkering'}</div>
+              <div class="result-details">${spot.antal} plads${spot.antal > 1 ? 'er' : ''}</div>
+            </div>
+            <div class="result-distance">${formatDistance(spot.dist)}</div>
+            <div class="result-actions">
+              <button class="action-btn" onclick="event.stopPropagation();navigateTo(${spot.lat},${spot.lng})" aria-label="Naviger">${arrowSVG()}</button>
+              <button class="action-btn ${isFav ? 'fav-active' : ''}" onclick="event.stopPropagation();toggleFavorite('${spot.id}')" aria-label="Favorit" data-fav-btn="${spot.id}">${isFav ? heartFilledSVG(18) : heartOutlineSVG(18)}</button>
+            </div>
+          `;
+
+          item.addEventListener('click', () => {
+            map.setView([spot.lat, spot.lng], 17);
+            markersLayer.eachLayer(m => {
+              if (m.getLatLng().lat === spot.lat && m.getLatLng().lng === spot.lng) {
+                m.openPopup();
+              }
+            });
+            highlightResult(spot.id);
+          });
+
+          list.appendChild(item);
+          globalIdx++;
+        });
+      });
+
+      // Suggest expanding if there are more beyond current range
+      if (nextRange && spotsInNextRange > inRange.length) {
+        const more = spotsInNextRange - inRange.length;
+        const expandEl = document.createElement('div');
+        expandEl.className = 'expand-range';
+        expandEl.onclick = () => setRange(nextRange);
+        expandEl.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Vis ${more} flere inden for ${nextRange < 1000 ? nextRange + ' m' : '1 km'}
+        `;
+        list.appendChild(expandEl);
+      }
+
+      // Center map on the searched location, zoom to fit the range
+      const zoomForRange = maxRange <= 250 ? 17 : maxRange <= 500 ? 16 : 15;
+      map.setView([originLat, originLng], zoomForRange);
+
+      // Expand sheet
+      document.getElementById('bottomSheet').classList.remove('collapsed');
+    }
+
+    function setRange(range) {
+      maxRange = range;
+      // Update button states
+      document.querySelectorAll('.dist-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.range) === range);
+      });
+      renderResults();
+    }
+
+    // Distance filter button clicks
+    document.getElementById('distanceFilter').addEventListener('click', e => {
+      const btn = e.target.closest('.dist-btn');
+      if (!btn) return;
+      setRange(parseInt(btn.dataset.range));
+    });
+
+    function highlightResult(id) {
+      document.querySelectorAll('.result-item').forEach(el => {
+        el.classList.toggle('highlighted', el.dataset.id === id);
+      });
+    }
+
+    // ---- Search ----
+    const searchInput = document.getElementById('searchInput');
+    const searchClear = document.getElementById('searchClear');
+    const searchDropdown = document.getElementById('searchDropdown');
+
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim();
+      searchClear.classList.toggle('visible', q.length > 0);
+
+      clearTimeout(debounceTimer);
+      if (q.length < 2) {
+        searchDropdown.classList.remove('open');
+        return;
+      }
+      debounceTimer = setTimeout(() => searchDAWA(q), 300);
+    });
+
+    searchClear.addEventListener('click', () => {
+      searchInput.value = '';
+      searchClear.classList.remove('visible');
+      searchDropdown.classList.remove('open');
+      if (searchMarker) { map.removeLayer(searchMarker); searchMarker = null; }
+    });
+
+    // Big, obvious search location marker with pin shape + pulsing ring
+    function createSearchMarkerIcon() {
+      return L.divIcon({
+        className: '',
+        html: `<div style="position:relative;width:40px;height:52px">
+          <div class="search-pin-pulse" style="top:8px;left:0"></div>
+          <svg width="40" height="52" viewBox="0 0 40 52" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4))">
+            <path d="M20 0C9 0 0 9 0 20c0 15 20 32 20 32s20-17 20-32C40 9 31 0 20 0z" fill="#e74c3c"/>
+            <circle cx="20" cy="18" r="8" fill="white"/>
+            <text x="20" y="23" text-anchor="middle" font-size="14" font-weight="800" fill="#e74c3c" font-family="-apple-system,sans-serif">DU</text>
+          </svg>
+        </div>`,
+        iconSize: [40, 52],
+        iconAnchor: [20, 52],
+        popupAnchor: [0, -52]
+      });
+    }
+
+    async function searchDAWA(query) {
+      try {
+        // Search DAWA access addresses (no apartment details) + Nominatim places
+        const [resKbh, resFrb, resPlaces] = await Promise.all([
+          fetch(`https://api.dataforsyningen.dk/adgangsadresser/autocomplete?q=${encodeURIComponent(query)}&kommunekode=0101&per_side=3&fuzzy=`),
+          fetch(`https://api.dataforsyningen.dk/adgangsadresser/autocomplete?q=${encodeURIComponent(query)}&kommunekode=0147&per_side=2&fuzzy=`),
+          fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ' copenhagen')}&format=json&limit=3&bounded=1&viewbox=12.4,55.6,12.7,55.75`, {
+            headers: { 'Accept-Language': 'da' }
+          }).catch(() => ({ json: () => [] }))
+        ]);
+        const [kbhResults, frbResults, placeResults] = await Promise.all([resKbh.json(), resFrb.json(), resPlaces.json()]);
+
+        // Combine: addresses first, then places
+        const combined = [];
+
+        // Add DAWA address results (adgangsadresser = street-level, no apartment details)
+        [...kbhResults, ...frbResults].forEach(r => {
+          const addr = r.adgangsadresse || r.adresse;
+          if (addr?.y && addr?.x) {
+            combined.push({
+              lat: addr.y,
+              lng: addr.x,
+              text: r.tekst,
+              type: 'address'
+            });
+          }
+        });
+
+        // Add Nominatim place results (avoid duplicates near existing results)
+        (placeResults || []).forEach(p => {
+          const lat = parseFloat(p.lat);
+          const lng = parseFloat(p.lon);
+          if (isNaN(lat) || isNaN(lng)) return;
+          // Skip if too close to an existing result
+          const tooClose = combined.some(c => Math.abs(c.lat - lat) < 0.0005 && Math.abs(c.lng - lng) < 0.0005);
+          if (tooClose) return;
+          combined.push({
+            lat, lng,
+            text: p.display_name.split(',').slice(0, 3).join(','),
+            type: 'place'
+          });
+        });
+
+        if (combined.length === 0) {
+          searchDropdown.innerHTML = '<div class="search-dropdown-item" style="color:#999">Ingen resultater</div>';
+          searchDropdown.classList.add('open');
+          return;
+        }
+
+        const pinSVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+        const placeSVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#276EF1" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3" fill="#276EF1"/></svg>`;
+
+        searchDropdown.innerHTML = combined.map(r => `
+          <div class="search-dropdown-item" data-lat="${r.lat}" data-lng="${r.lng}" data-text="${r.text}">
+            ${r.type === 'place' ? placeSVG : pinSVG}
+            ${r.text}
+          </div>
+        `).join('');
+
+        searchDropdown.querySelectorAll('.search-dropdown-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const lat = parseFloat(item.dataset.lat);
+            const lng = parseFloat(item.dataset.lng);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            searchInput.value = item.dataset.text;
+            searchDropdown.classList.remove('open');
+            searchClear.classList.add('visible');
+
+            // Add/move big search marker
+            if (searchMarker) map.removeLayer(searchMarker);
+            searchMarker = L.marker([lat, lng], {
+              icon: createSearchMarkerIcon(),
+              zIndexOffset: 1000
+            }).addTo(map).bindPopup(`<b style="font-family:-apple-system,sans-serif">${item.dataset.text}</b>`);
+
+            showResults(lat, lng);
+            switchTab('map');
+          });
+        });
+
+        searchDropdown.classList.add('open');
+      } catch (err) {
+        searchDropdown.innerHTML = '<div class="search-dropdown-item" style="color:#999">Fejl ved soegning</div>';
+        searchDropdown.classList.add('open');
+      }
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.search-container')) {
+        searchDropdown.classList.remove('open');
+      }
+    });
+
+    // ---- GPS ----
+    const gpsBtn = document.getElementById('gpsBtn');
+
+    gpsBtn.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        showToast('Geolocation er ikke understottet');
+        return;
+      }
+
+      gpsBtn.classList.add('active');
+      showToast('Finder din placering...');
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const { latitude, longitude } = pos.coords;
+
+          if (gpsMarker) map.removeLayer(gpsMarker);
+          gpsMarker = L.marker([latitude, longitude], {
+            icon: L.divIcon({
+              className: '',
+              html: `<div style="position:relative;width:20px;height:20px">
+                <div style="position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(39,110,241,0.15);top:-10px;left:-10px"></div>
+                <div style="width:20px;height:20px;border-radius:50%;background:#276EF1;border:3px solid #fff;box-shadow:0 0 0 2px rgba(39,110,241,0.4)"></div>
+              </div>`,
+              iconSize: [20, 20],
+              iconAnchor: [10, 10]
+            }),
+            zIndexOffset: 900
+          }).addTo(map);
+
+          if (searchMarker) { map.removeLayer(searchMarker); searchMarker = null; }
+          searchInput.value = '';
+          searchClear.classList.remove('visible');
+
+          showResults(latitude, longitude);
+
+          // Watch for updates
+          if (gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+          gpsWatchId = navigator.geolocation.watchPosition(
+            p => {
+              const lat = p.coords.latitude, lng = p.coords.longitude;
+              if (gpsMarker) gpsMarker.setLatLng([lat, lng]);
+            },
+            null,
+            { enableHighAccuracy: true }
+          );
+        },
+        err => {
+          gpsBtn.classList.remove('active');
+          const msgs = {
+            1: 'Placeringstilladelse afvist. Tillad placering i indstillinger.',
+            2: 'Placering ikke tilgaengelig.',
+            3: 'Timeout - proev igen.'
+          };
+          showToast(msgs[err.code] || 'Kunne ikke finde placering');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+
+    // ---- Navigation ----
+    function navigateTo(lat, lng) {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        window.open(`maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`);
+      } else {
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`);
+      }
+    }
+
+    // ---- Favorites ----
+    function toggleFavorite(uuid) {
+      const idx = favorites.findIndex(f => f.uuid === uuid);
+      if (idx >= 0) {
+        favorites.splice(idx, 1);
+        showToast('Fjernet fra favoritter');
+      } else {
+        favorites.push({ uuid, note: '', savedAt: new Date().toISOString() });
+        showToast('Tilfojet til favoritter');
+      }
+      saveFavorites();
+      refreshFavUI(uuid);
+      renderFavorites();
+    }
+
+    function saveFavorites() {
+      localStorage.setItem('handicap-parking-favorites', JSON.stringify(favorites));
+    }
+
+    function refreshFavUI(uuid) {
+      const isFav = favorites.some(f => f.uuid === uuid);
+
+      const btn = document.querySelector(`[data-fav-btn="${uuid}"]`);
+      if (btn) {
+        btn.classList.toggle('fav-active', isFav);
+        btn.innerHTML = isFav ? heartFilledSVG(18) : heartOutlineSVG(18);
+      }
+
+      const popupBtn = document.getElementById(`popup-fav-${uuid}`);
+      if (popupBtn) {
+        popupBtn.style.color = isFav ? '#e74c3c' : '#999';
+        popupBtn.innerHTML = isFav ? heartFilledSVG(16) : heartOutlineSVG(16);
+      }
+    }
+
+    function renderFavorites() {
+      const list = document.getElementById('favoritesList');
+
+      if (favorites.length === 0) {
+        list.innerHTML = '<div class="empty-state">Ingen favoritter endnu. Tryk paa hjertet for at gemme en plads.</div>';
+        return;
+      }
+
+      list.innerHTML = '';
+      favorites.forEach(fav => {
+        const spot = allSpots.find(s => s.id === fav.uuid);
+        if (!spot) return;
+
+        const addr = spot.vejnavn + (spot.husnr ? ' ' + spot.husnr : '');
+        const el = document.createElement('div');
+        el.className = 'fav-item';
+        el.innerHTML = `
+          <div class="fav-item-header" onclick="goToSpot('${spot.id}')">
+            <div class="result-icon">${wheelchairListSVG()}</div>
+            <div class="fav-item-info">
+              <div class="fav-item-name">${addr || 'Handicapparkering'}</div>
+              <div class="fav-item-details">${spot.antal} plads${spot.antal > 1 ? 'er' : ''}</div>
+            </div>
+            <button class="fav-remove" onclick="event.stopPropagation();removeFavorite('${spot.id}')" aria-label="Fjern">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="fav-note-area">
+            <textarea class="fav-note-input" placeholder="Tilfoej note..." data-note-uuid="${spot.id}">${fav.note || ''}</textarea>
+            <button class="fav-note-save" onclick="saveNote('${spot.id}')">Gem</button>
+          </div>
+        `;
+        list.appendChild(el);
+      });
+    }
+
+    function removeFavorite(uuid) {
+      favorites = favorites.filter(f => f.uuid !== uuid);
+      saveFavorites();
+      renderFavorites();
+      refreshFavUI(uuid);
+      showToast('Fjernet fra favoritter');
+    }
+
+    function saveNote(uuid) {
+      const textarea = document.querySelector(`[data-note-uuid="${uuid}"]`);
+      if (!textarea) return;
+      const fav = favorites.find(f => f.uuid === uuid);
+      if (fav) {
+        fav.note = textarea.value;
+        saveFavorites();
+        showToast('Note gemt');
+      }
+    }
+
+    function goToSpot(uuid) {
+      const spot = allSpots.find(s => s.id === uuid);
+      if (!spot) return;
+      switchTab('map');
+      map.setView([spot.lat, spot.lng], 17);
+      setTimeout(() => {
+        markersLayer.eachLayer(m => {
+          if (m.getLatLng().lat === spot.lat && m.getLatLng().lng === spot.lng) {
+            m.openPopup();
+          }
+        });
+      }, 300);
+    }
+
+    // ---- Tabs ----
+    function switchTab(tab) {
+      activeTab = tab;
+      document.getElementById('tabMap').classList.toggle('active', tab === 'map');
+      document.getElementById('tabFav').classList.toggle('active', tab === 'fav');
+      document.getElementById('favoritesView').classList.toggle('visible', tab === 'fav');
+      if (tab === 'fav') renderFavorites();
+      if (tab === 'map') map.invalidateSize();
+    }
+
+    document.getElementById('tabMap').addEventListener('click', () => switchTab('map'));
+    document.getElementById('tabFav').addEventListener('click', () => switchTab('fav'));
+
+    // ---- Bottom sheet drag ----
+    const sheetHandle = document.getElementById('sheetHandle');
+    const bottomSheet = document.getElementById('bottomSheet');
+
+    sheetHandle.addEventListener('click', () => {
+      sheetCollapsed = !sheetCollapsed;
+      bottomSheet.classList.toggle('collapsed', sheetCollapsed);
+    });
+
+    // ---- Toast ----
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    // ---- Service Worker ----
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
+    // ---- Init ----
+    loadParkingData();
+  </script>
+</body>
+</html>
