@@ -175,13 +175,13 @@
       border-radius: 16px 16px 0 0;
       box-shadow: 0 -2px 16px rgba(0,0,0,0.1);
       max-height: 55vh;
-      min-height: 80px;
+      min-height: 24px;
       display: flex;
       flex-direction: column;
       transition: max-height 0.3s ease;
     }
 
-    .bottom-sheet.collapsed { max-height: 130px; }
+    .bottom-sheet.collapsed { max-height: 24px; overflow: hidden; }
 
     .sheet-handle {
       width: 36px;
@@ -206,8 +206,27 @@
       padding: 4px 16px 8px;
       gap: 6px;
       flex-shrink: 0;
+      align-items: center;
     }
     .distance-filter.visible { display: flex; }
+
+    .fav-tab-btn {
+      margin-left: auto;
+      padding: 5px 12px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 20px;
+      background: var(--white);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--gray-600);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .fav-tab-btn:active { background: var(--gray-100); }
 
     .dist-btn {
       padding: 5px 12px;
@@ -255,7 +274,7 @@
       flex: 1;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding-bottom: calc(56px + var(--safe-bottom));
+      padding-bottom: calc(16px + var(--safe-bottom));
     }
 
     .result-item {
@@ -383,7 +402,7 @@
     .favorites-list {
       flex: 1;
       overflow-y: auto;
-      padding-bottom: calc(56px + var(--safe-bottom));
+      padding-bottom: calc(16px + var(--safe-bottom));
     }
 
     .fav-item {
@@ -504,6 +523,10 @@
       <button class="dist-btn active" data-range="250">250 m</button>
       <button class="dist-btn" data-range="500">500 m</button>
       <button class="dist-btn" data-range="1000">1 km</button>
+      <button class="fav-tab-btn" id="favInlineBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        Favoritter
+      </button>
     </div>
     <div class="results-list" id="resultsList">
       <div class="empty-state" id="emptyState">
@@ -515,25 +538,19 @@
 
   <!-- Favorites view -->
   <div class="favorites-view" id="favoritesView">
-    <div class="favorites-header">Favoritter</div>
+    <div class="favorites-header" style="display:flex;align-items:center;gap:12px">
+      <button onclick="switchTab('map')" style="border:none;background:none;cursor:pointer;padding:4px;color:#1a1a1a">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      </button>
+      Favoritter
+    </div>
     <div class="favorites-list" id="favoritesList"></div>
   </div>
 
-  <!-- Tab bar -->
-  <div class="tab-bar">
-    <button class="tab-btn active" id="tabMap" aria-label="Kort">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
-        <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
-      </svg>
-      Kort
-    </button>
-    <button class="tab-btn" id="tabFav" aria-label="Favoritter">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-      </svg>
-      Favoritter
-    </button>
+  <!-- Tab bar (hidden, switching via inline button) -->
+  <div class="tab-bar" style="display:none">
+    <button class="tab-btn active" id="tabMap" aria-label="Kort"></button>
+    <button class="tab-btn" id="tabFav" aria-label="Favoritter"></button>
   </div>
 
   <!-- Toast -->
@@ -926,7 +943,7 @@
         list.innerHTML = `<div class="empty-state">Ingen handicapparkeringer inden for ${maxRange} m${nearest ? `.<br>Naermeste er ${formatDistance(nearest.dist)} vaek.` : ''}</div>${suggestion}`;
 
         // Center map on searched location
-        map.setView([originLat, originLng], 17);
+        centerMapOnPoint(originLat, originLng, 17);
         document.getElementById('bottomSheet').classList.remove('collapsed');
         return;
       }
@@ -1001,12 +1018,24 @@
         list.appendChild(expandEl);
       }
 
-      // Center map on the searched location, zoom to fit the range
+      // Center map on searched location, offset upward to account for bottom sheet
       const zoomForRange = maxRange <= 250 ? 17 : maxRange <= 500 ? 16 : 15;
-      map.setView([originLat, originLng], zoomForRange);
+      centerMapOnPoint(originLat, originLng, zoomForRange);
 
       // Expand sheet
       document.getElementById('bottomSheet').classList.remove('collapsed');
+    }
+
+    // Center the map so the point appears in the visible area above the bottom sheet
+    function centerMapOnPoint(lat, lng, zoom) {
+      map.setView([lat, lng], zoom, { animate: true });
+      // After the view is set, offset downward to push the point above the sheet
+      setTimeout(() => {
+        const sheetHeight = document.getElementById('bottomSheet').offsetHeight || 0;
+        const mapHeight = map.getContainer().offsetHeight;
+        const offsetPx = sheetHeight / 2;
+        map.panBy([0, -offsetPx], { animate: true, duration: 0.3 });
+      }, 100);
     }
 
     function setRange(range) {
@@ -1399,6 +1428,7 @@
 
     document.getElementById('tabMap').addEventListener('click', () => switchTab('map'));
     document.getElementById('tabFav').addEventListener('click', () => switchTab('fav'));
+    document.getElementById('favInlineBtn').addEventListener('click', () => switchTab('fav'));
 
     // ---- Bottom sheet drag ----
     const sheetHandle = document.getElementById('sheetHandle');
